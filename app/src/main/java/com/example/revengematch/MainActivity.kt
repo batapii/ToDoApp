@@ -1,61 +1,66 @@
-package com.example.revengematch
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.revengematch.Word
+import com.example.revengematch.WordDao
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
-import android.app.Activity
-import android.content.Intent
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.viewModels
-import androidx.recyclerview.widget.DefaultItemAnimator
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+@Database(entities = [Word::class], version = 1) // このアノテーションは、WordクラスをSQLiteデータベースのスキーマとしてRoomに指示します
+abstract class WordRoomDatabase : RoomDatabase() { // RoomDatabaseのサブクラスとして抽象クラスを作成します
 
-class MainActivity : AppCompatActivity() {
-    private val newWordActivityRequestCode = 1
-    private val wordViewModel: WordViewModel by viewModels {
-        WordViewModelFactory((application as WordsApplication).repository)
-    }
+    abstract fun wordDao(): WordDao // DAOを取得する抽象メソッドを定義します。Roomはこのコードを実装します。
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        val recyclerView = findViewById<RecyclerView>(R.id.recyclerview)
+    companion object { // コンパニオンオブジェクト。シングルトンとしてデータベースインスタンスを提供します。
 
-        val adapter = WordListAdapter(
-            onRemove = { word ->
-                wordViewModel.delete(word)
+        @Volatile
+        private var INSTANCE: WordRoomDatabase? = null // INSTANCE変数を保持します。これはデータベースへの参照を保持します。
+
+        fun getDatabase(
+            context: Context,
+            scope: CoroutineScope
+        ): WordRoomDatabase {
+            // INSTANCEがnullでなければそれを返し、nullであればデータベースを作成します
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    WordRoomDatabase::class.java,
+                    "word_database"
+                )
+                    .fallbackToDestructiveMigration() // Migrationオブジェクトがなければ、データベースを破壊して再構築します。
+                    .addCallback(WordDatabaseCallback(scope)) // データベースが作成されたときに呼び出すコールバックを追加します。
+                    .build() // データベースをビルドします。
+
+                INSTANCE = instance // インスタンスをINSTANCE変数に格納します。
+                instance // インスタンスを返します。
             }
-        ) { isChecked ->
-            wordViewModel.updateCheckStatus(isChecked)
         }
-        recyclerView.adapter = adapter
-        recyclerView.layoutManager = LinearLayoutManager(this)
 
-        //val editText = findViewById<FloatingActionButton>(R.id.edit_word)
-        val fab = findViewById<FloatingActionButton>(R.id.fab)
-        fab.setOnClickListener {
-            val inten = Intent(this@MainActivity, NewWordActivity::class.java)
-            startActivityForResult(inten, newWordActivityRequestCode)
+        private class WordDatabaseCallback(
+            private val scope: CoroutineScope
+        ) : RoomDatabase.Callback() {
+            // データベースの作成時にデータベースをポピュレートします。
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                super.onCreate(db)
+                INSTANCE?.let { database ->
+                    scope.launch(Dispatchers.IO) { // 別のスレッドでデータベースをポピュレートします。
+                        populateDatabase(database.wordDao())
+                    }
+                }
+            }
         }
-        wordViewModel.allWords.observe(this) { words ->
-            words.let { adapter.submitList(it) }
-        }
-    }
 
+        suspend fun populateDatabase(wordDao: WordDao) {
+            // アプリをクリーンなデータベースで開始します。作成時にのみポピュレートする場合は不要です。
+            wordDao.deleteAll() // すべてのワードを削除します。
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, intentData: Intent?) {
-        super.onActivityResult(requestCode, resultCode, intentData)
-        if (requestCode == newWordActivityRequestCode && resultCode == Activity.RESULT_OK) {
-            intentData?.getStringExtra(NewWordActivity.EXTRA_REPLY)?.let { reply ->
-                val word = Word(reply)
-                wordViewModel.insert(word) }
-        } else {
-            Toast.makeText(
-                applicationContext,
-                R.string.empty_not_saved,
-                Toast.LENGTH_LONG
-            ).show()
+            var word = Word("テスト") // ワードを作成します。
+            wordDao.insert(word) // データベースにワードを挿入します。
+            word = Word("テスト") // 新しいワードを作成します。
+            wordDao.insert(word) // データベースに新しいワードを挿入します。
         }
     }
 }

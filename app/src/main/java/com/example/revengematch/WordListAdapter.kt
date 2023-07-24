@@ -13,37 +13,41 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
+// リストアイテムを操作するためのアダプタークラス
 class WordListAdapter(val onRemove: (Word) -> Unit, val onCheckBoxClicked: (Word) -> Unit)
     :ListAdapter<Word, WordListAdapter.WordViewHolder>(WordsComparator()) {
+
+    // リストアイテムのビューホルダーを作成する
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WordViewHolder {
         return WordViewHolder.create(parent)
     }
+
+    // ビューホルダーをデータにバインド（結びつけ）する
     override fun onBindViewHolder(holder: WordViewHolder, position: Int) {
         val current = getItem(position)
         holder.bind(current.word, current.isChecked) { value ->
             val word = Word(current.word, value)
             onCheckBoxClicked.invoke(word)
         }
+
+        // リストアイテムがクリックされたときの処理（ダイアログ表示）
         holder.itemView.setOnClickListener {
             AlertDialog.Builder(holder.itemView.context)
-                //.setTitle("${listPosition.word}")
                 .setMessage("消す？")
                 .setPositiveButton("Yes",DialogInterface.OnClickListener { _, _ ->
-                    this@WordListAdapter.onRemove(getItem(position))
+                    this@WordListAdapter.onRemove(getItem(position))  // 削除処理を呼び出す
                 })
                 .setNegativeButton("No",null)
                 .show()
         }
     }
 
+    // リストアイテムを表示するためのビューホルダークラス
     class WordViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-
-
-        //private val todoList:ArrayList<Word>
-        private val position:Int = adapterPosition
-        //private val listPosition = todoList[position]
         private val wordItemView: TextView = itemView.findViewById(R.id.textView)
         var cb : CheckBox = itemView.findViewById(R.id.checkBox)
+
+        // ビューホルダーにデータをバインドする
         fun bind(text: String?,isCheckBox:Boolean, onCheckBoxClicked: (Boolean) -> Unit) {
             wordItemView.text = text
             cb.isChecked = isCheckBox
@@ -54,6 +58,8 @@ class WordListAdapter(val onRemove: (Word) -> Unit, val onCheckBoxClicked: (Word
                 wordItemView.paintFlags = wordItemView.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv() //取り消し線の取り消し
                 wordItemView.setTextColor(Color.argb(255,0,0,0));   //カラー変更
             }
+
+            // チェックボックスがクリックされたときの処理を定義
             cb.setOnClickListener {
                 //呼び出す
                 onCheckBoxClicked.invoke(cb.isChecked)
@@ -61,6 +67,7 @@ class WordListAdapter(val onRemove: (Word) -> Unit, val onCheckBoxClicked: (Word
         }
 
         companion object {
+            // ビューホルダーを作成するための静的メソッド
             fun create(parent: ViewGroup): WordViewHolder {
                 val view: View = LayoutInflater.from(parent.context)
                     .inflate(R.layout.recyclerview_item, parent, false)
@@ -69,11 +76,14 @@ class WordListAdapter(val onRemove: (Word) -> Unit, val onCheckBoxClicked: (Word
         }
     }
 
+    // リストアイテムの内容が同一であるかを判定するクラス
     class WordsComparator : DiffUtil.ItemCallback<Word>() {
+        // リストアイテムが同一であるかを判定するメソッド
         override fun areItemsTheSame(oldItem: Word, newItem: Word): Boolean {
             return oldItem === newItem
         }
 
+        // リストアイテムの内容が同一であるかを判定するメソッド
         override fun areContentsTheSame(oldItem: Word, newItem: Word): Boolean {
             return oldItem.word == newItem.word
         }
